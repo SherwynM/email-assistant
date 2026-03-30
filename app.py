@@ -1,27 +1,23 @@
-# app.py — Render Backend for Email Research Workflow
+# app.py — Render Backend for Email Assistant
 
 from flask import Flask, request, jsonify
 import requests
 import os
 import logging
 import time
+import json as json_lib
 from functools import wraps
 
-# ─── Logging setup ────────────────────────────────────────────────────────────
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s"
-)
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
 
-# ─── Config from environment only — never hardcode keys ──────────────────────
-# NEW
 GROQ_API_KEY     = os.environ.get("GROQ_API_KEY")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
 GROQ_URL         = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL       = "llama-3.3-70b-versatile"
+
 
 # ─── Token verification ───────────────────────────────────────────────────────
 def verify_token(token):
@@ -35,17 +31,14 @@ def verify_token(token):
 
         data = resp.json()
 
-        # Audience check — only enforced if GOOGLE_CLIENT_ID is set
         if GOOGLE_CLIENT_ID and data.get("aud") != GOOGLE_CLIENT_ID:
             logger.warning(f"Audience mismatch: {data.get('aud')}")
             return None, "Token audience mismatch"
 
-        # Expiry check
         if int(data.get("exp", 0)) < time.time():
             return None, "Token expired"
 
         return data, None
-
     except Exception as e:
         logger.error(f"Token verification failed: {e}")
         return None, str(e)
@@ -70,7 +63,7 @@ def require_auth(f):
     return wrapper
 
 
-# ─── Gemini helper with retry on 429 ─────────────────────────────────────────
+# ─── Groq helper with retry on 429 ───────────────────────────────────────────
 def call_groq(prompt, max_tokens=1024, retries=2, retry_delay=5):
     if not GROQ_API_KEY:
         raise ValueError("GROQ_API_KEY not set in environment")
@@ -88,12 +81,7 @@ def call_groq(prompt, max_tokens=1024, retries=2, retry_delay=5):
     }
 
     for attempt in range(retries):
-        resp = requests.post(
-            GROQ_URL,
-            json=payload,
-            headers=headers,
-            timeout=30
-        )
+        resp = requests.post(GROQ_URL, json=payload, headers=headers, timeout=30)
 
         if resp.status_code == 200:
             return resp.json()["choices"][0]["message"]["content"]
@@ -112,47 +100,76 @@ def call_groq(prompt, max_tokens=1024, retries=2, retry_delay=5):
     raise Exception("Groq call failed after retries")
 
 
+# ─── Routes ───────────────────────────────────────────────────────────────────
+
 @app.route("/health", methods=["GET"])
 def health():
-    return jsonify({"status": "ok", "service": "email-research-backend"})
+    return jsonify({"status": "ok", "service": "email-assistant-backend"})
 
 
 @app.route("/process", methods=["POST"])
 @require_auth
 def process():
-    """Single endpoint for all Gmail Add-on tasks"""
     body = request.get_json()
     if not body:
         return jsonify({"error": "No JSON body"}), 400
 
     task       = body.get("task", "")
-    email_body = body.get("body", "")[:2000]  # Truncated to avoid bandwidth quota
+    email_body = body.get("body", "")[:2000]
 
     prompts = {
         "summarize": (
-            "Summarize the following email clearly and concisely in 3 to 5 bullet points. "
-            "Focus on the key message, action items, deadlines, and important details.\n\n"
+            "Summarize the following email professionally using this exact format:\n\n"
+            "**📋 Email Summary**\n\n"
+            "**Overview**\n"
+            "[One concise sentence describing the purpose of the email]\n\n"
+            "**Key Points**\n"
+            "• [Key point 1]\n"
+            "• [Key point 2]\n"
+            "• [Key point 3]\n\n"
+            "**Action Items** (only include if present in the email)\n"
+            "• [Person] — [Task] (Due: [Date])\n\n"
+            "**Next Steps** (only include if applicable)\n"
+            "[What the recipient should do next]\n\n"
+            "Rules: Only include sections relevant to the email. "
+            "Keep bullet points concise. Do not add commentary outside the format.\n\n"
             "Email:\n" + email_body
         ),
         "translate": (
-            "Translate the following email into Konkani using Devanagari script. "
-            "Preserve the original tone and meaning.\n\n"
+            "Translate the following email into Konkani using Roman script (Romi Konkani) ONLY. "
+            "Use English alphabet letters exclusively — do NOT use Devanagari script or any other script. "
+            "Write all Konkani words phonetically using Roman letters. "
+            "Preserve the original tone, structure, and meaning of the email.\n\n"
             "Email:\n" + email_body
         ),
         "grammar": (
             "Check the following email for grammar and spelling mistakes. "
-            "For each issue, respond in this format:\n"
-            "Incorrect: ...\nCorrect: ...\nReason: ...\n\n"
-            "If there are no errors, say: No errors found — the email looks good.\n\n"
+            "Use this exact format for each issue:\n\n"
+            "**Issue [number]**\n"
+            "Incorrect: [original text]\n"
+            "Correct: [corrected text]\n"
+            "Reason: [brief explanation]\n\n"
+            "Separate each issue with a blank line. "
+            "If there are no errors, respond with exactly:\n"
+            "**✅ No errors found — the email is well written.**\n\n"
             "Email:\n" + email_body
         ),
         "sentiment": (
-            "Analyze the sentiment of the following email and respond with:\n"
-            "1. Overall Sentiment\n"
-            "2. Confidence\n"
-            "3. Emotional Tones\n"
-            "4. One-sentence Tone Summary\n"
-            "5. Suggested Reply Tone\n\n"
+            "Analyze the sentiment of the following email using this exact format:\n\n"
+            "**📊 Sentiment Analysis**\n\n"
+            "**Overall Sentiment:** [Positive / Negative / Neutral / Mixed]\n"
+            "**Confidence Level:** [High / Medium / Low]\n\n"
+            "**Emotional Tones**\n"
+            "• [Tone 1]\n"
+            "• [Tone 2]\n"
+            "• [Tone 3]\n\n"
+            "**Tone Summary**\n"
+            "[One clear sentence describing the overall emotional tone]\n\n"
+            "**Suggested Reply Tone**\n"
+            "[How the recipient should respond — e.g. professional and reassuring]\n\n"
+            "**Sample Reply Opener**\n"
+            "[One example opening sentence for a reply]\n\n"
+            "Do not add commentary outside this format.\n\n"
             "Email:\n" + email_body
         )
     }
@@ -181,10 +198,10 @@ def classify():
     email_body = body.get("body", "")[:800]
 
     prompt = (
-        "Classify this email into exactly one of:\n"
+        "Classify this email into exactly one of these labels:\n"
         "pitch_deck | vendor_proposal | client_brief | meeting_request | general_business\n\n"
         f"Subject: {subject}\nBody excerpt: {email_body}\n\n"
-        "Reply with ONLY the label."
+        "Reply with ONLY the label. No explanation."
     )
 
     try:
@@ -202,21 +219,28 @@ def analyze():
     if not body:
         return jsonify({"error": "No JSON body"}), 400
 
-    import json as json_lib
     subject    = body.get("subject", "")
     email_body = body.get("body", "")[:1200]
     sender     = body.get("sender", "")
     email_type = body.get("type", "general_business")
 
     prompt = (
-        "Analyze this email. Return ONLY valid JSON with keys:\n"
-        "summary, key_takeaway, risk_flags (list), suggested_action, "
-        "research_score (1-10), draft_reply\n\n"
-        f"From: {sender}\nSubject: {subject}\nType: {email_type}\nBody: {email_body}"
+        "Analyze this email and return ONLY valid JSON with exactly these keys:\n"
+        "{\n"
+        '  "type": "one of: pitch_deck | vendor_proposal | client_brief | meeting_request | general_business",\n'
+        '  "summary": "1-2 sentence overview of the email",\n'
+        '  "key_takeaway": "the single most important point from this email",\n'
+        '  "risk_flags": ["concern 1", "concern 2"],\n'
+        '  "suggested_action": "what the recipient should do next",\n'
+        '  "research_score": 8,\n'
+        '  "draft_reply": "short professional reply of 3-4 sentences, no subject line"\n'
+        "}\n\n"
+        "Rules: Return raw JSON only. No markdown fences. No explanation outside the JSON.\n\n"
+        f"From: {sender}\nSubject: {subject}\nEmail Type: {email_type}\nBody: {email_body}"
     )
 
     try:
-        raw = call_groq(prompt, max_tokens=600)
+        raw = call_groq(prompt, max_tokens=700)
         try:
             result = json_lib.loads(raw)
         except Exception:
@@ -241,9 +265,9 @@ def draft():
     context     = body.get("context", "")
 
     prompt = (
-        f"Write a short professional reply (3-5 sentences).\n\n"
+        f"Write a short professional email reply of 3-5 sentences.\n\n"
         f"From: {sender_name}\nSubject: {subject}\nBody: {email_body}\nContext: {context}\n\n"
-        "Write reply text only. No subject line."
+        "Reply text only. No subject line. No sign-off needed."
     )
 
     try:
