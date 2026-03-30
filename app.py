@@ -17,13 +17,11 @@ logger = logging.getLogger(__name__)
 app = Flask(__name__)
 
 # ─── Config from environment only — never hardcode keys ──────────────────────
-GEMINI_API_KEY   = os.environ.get("GEMINI_API_KEY")
+# NEW
+GROQ_API_KEY     = os.environ.get("GROQ_API_KEY")
 GOOGLE_CLIENT_ID = os.environ.get("GOOGLE_CLIENT_ID")
-GEMINI_URL = (
-    "https://generativelanguage.googleapis.com"
-    "/v1beta/models/gemini-2.0-flash-lite:generateContent"
-)
-
+GROQ_URL         = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL       = "llama-3.3-70b-versatile"
 
 # ─── Token verification ───────────────────────────────────────────────────────
 def verify_token(token):
@@ -73,43 +71,46 @@ def require_auth(f):
 
 
 # ─── Gemini helper with retry on 429 ─────────────────────────────────────────
-def call_gemini(prompt, max_tokens=1024, retries=2, retry_delay=5):
-    if not GEMINI_API_KEY:
-        raise ValueError("GEMINI_API_KEY not set in environment")
+def call_groq(prompt, max_tokens=1024, retries=2, retry_delay=5):
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY not set in environment")
 
     payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "maxOutputTokens": max_tokens,
-            "temperature": 0.3
-        }
+        "model": GROQ_MODEL,
+        "messages": [{"role": "user", "content": prompt}],
+        "max_tokens": max_tokens,
+        "temperature": 0.3
+    }
+
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
     }
 
     for attempt in range(retries):
         resp = requests.post(
-            f"{GEMINI_URL}?key={GEMINI_API_KEY}",
+            GROQ_URL,
             json=payload,
+            headers=headers,
             timeout=30
         )
 
         if resp.status_code == 200:
-            return resp.json()["candidates"][0]["content"]["parts"][0]["text"]
+            return resp.json()["choices"][0]["message"]["content"]
 
         if resp.status_code == 429:
-            logger.warning(f"Gemini quota hit (attempt {attempt + 1}/{retries}), retrying in {retry_delay}s...")
+            logger.warning(f"Groq quota hit (attempt {attempt + 1}/{retries}), retrying in {retry_delay}s...")
             if attempt < retries - 1:
                 time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
+                retry_delay *= 2
                 continue
-            raise Exception("Gemini quota exceeded. Enable billing at console.cloud.google.com or try again later.")
+            raise Exception("Groq quota exceeded. Try again shortly.")
 
-        logger.error(f"Gemini error {resp.status_code}: {resp.text[:200]}")
-        raise Exception(f"Gemini API error: {resp.status_code}")
+        logger.error(f"Groq error {resp.status_code}: {resp.text[:200]}")
+        raise Exception(f"Groq API error: {resp.status_code}")
 
-    raise Exception("Gemini call failed after retries")
+    raise Exception("Groq call failed after retries")
 
-
-# ─── Routes ───────────────────────────────────────────────────────────────────
 
 @app.route("/health", methods=["GET"])
 def health():
@@ -161,7 +162,7 @@ def process():
         return jsonify({"error": f"Unknown task: {task}"}), 400
 
     try:
-        result = call_gemini(prompt, max_tokens=1024)
+        result = call_groq(prompt, max_tokens=1024)
         logger.info(f"[{request.user_email}] task={task} completed")
         return jsonify({"result": result})
     except Exception as e:
@@ -187,7 +188,7 @@ def classify():
     )
 
     try:
-        result = call_gemini(prompt, max_tokens=10)
+        result = call_groq(prompt, max_tokens=10)
         return jsonify({"type": result.strip()})
     except Exception as e:
         logger.error(f"classify error: {e}")
@@ -215,7 +216,7 @@ def analyze():
     )
 
     try:
-        raw = call_gemini(prompt, max_tokens=600)
+        raw = call_groq(prompt, max_tokens=600)
         try:
             result = json_lib.loads(raw)
         except Exception:
@@ -246,7 +247,7 @@ def draft():
     )
 
     try:
-        result = call_gemini(prompt, max_tokens=250)
+        result = call_groq(prompt, max_tokens=250)
         return jsonify({"draft": result.strip()})
     except Exception as e:
         logger.error(f"draft error: {e}")
