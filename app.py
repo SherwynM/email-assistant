@@ -143,31 +143,6 @@ def process():
             "Add a blank line between each paragraph, matching the original layout.\n\n"
             "Email:\n" + email_body
         ),
-        "grammar": (
-            "Check the following email for genuine grammar and spelling mistakes only. "
-            "Use this exact format for each issue:\n\n"
-            "**Issue [number]**\n"
-            "Incorrect: [original text]\n"
-            "Correct: [corrected text]\n"
-            "Reason: [brief explanation]\n\n"
-            "Strict rules you MUST follow:\n"
-            "- Do NOT flag proper nouns, brand names, company names, product names, or event names "
-            "(e.g. TechInnovate, DataInsight Corp, AI-Powered Automation) — these are intentional and correct.\n"
-            "- Do NOT flag email salutations (e.g. 'Hello All,', 'Hi Team,', 'Dear Sherwyn,') — "
-            "comma placement in salutations is a style convention, never a grammar error.\n"
-            "- Do NOT flag email sign-offs or complimentary closes (e.g. 'All the best,', 'Best regards,', "
-            "'Sincerely,', 'Cheers,') — the trailing comma is correct convention, never flag it.\n"
-            "- Do NOT flag date formats — regional formats like '24th November 2025' (British/Indian English) "
-            "and 'November 24th, 2025' (US English) are both correct; date format is never a grammar error.\n"
-            "- Do NOT flag informal contractions (e.g. I'm, Let's, There's) as errors in a business email "
-            "unless the email is strictly formal in tone throughout.\n"
-            "- Do NOT flag style preferences, punctuation inside action item lists, or subjective word choices.\n"
-            "- Only flag clear, objective grammatical errors and definite spelling mistakes.\n"
-            "- Separate each issue with a blank line.\n"
-            "- If there are no real errors, respond with exactly:\n"
-            "**✅ No errors found — the email is well written.**\n\n"
-            "Email:\n" + email_body
-        ),
         "sentiment": (
             "Analyze the sentiment of the following email using this exact format:\n\n"
             "**📊 Sentiment Analysis**\n\n"
