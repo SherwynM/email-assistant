@@ -139,18 +139,26 @@ def process():
             "Translate the following email into Konkani using Roman script (Romi Konkani) ONLY. "
             "Use English alphabet letters exclusively — do NOT use Devanagari script or any other script. "
             "Write all Konkani words phonetically using Roman letters. "
-            "Preserve the original tone, structure, and meaning of the email.\n\n"
+            "Preserve the original tone, structure, and paragraph breaks exactly as they appear in the email. "
+            "Add a blank line between each paragraph, matching the original layout.\n\n"
             "Email:\n" + email_body
         ),
         "grammar": (
-            "Check the following email for grammar and spelling mistakes. "
+            "Check the following email for genuine grammar and spelling mistakes only. "
             "Use this exact format for each issue:\n\n"
             "**Issue [number]**\n"
             "Incorrect: [original text]\n"
             "Correct: [corrected text]\n"
             "Reason: [brief explanation]\n\n"
-            "Separate each issue with a blank line. "
-            "If there are no errors, respond with exactly:\n"
+            "Strict rules you MUST follow:\n"
+            "- Do NOT flag proper nouns, brand names, company names, product names, or event names "
+            "(e.g. TechInnovate, DataInsight Corp, AI-Powered Automation) — these are intentional and correct.\n"
+            "- Do NOT flag informal contractions (e.g. I'm, Let's, There's) as errors in a business email "
+            "unless the email is strictly formal in tone throughout.\n"
+            "- Do NOT flag style preferences or subjective word choices as errors.\n"
+            "- Only flag clear, objective grammatical errors and definite spelling mistakes.\n"
+            "- Separate each issue with a blank line.\n"
+            "- If there are no real errors, respond with exactly:\n"
             "**✅ No errors found — the email is well written.**\n\n"
             "Email:\n" + email_body
         ),
