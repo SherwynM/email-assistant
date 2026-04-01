@@ -1,1 +1,1 @@
-# emailInsights
+# email-assistant
